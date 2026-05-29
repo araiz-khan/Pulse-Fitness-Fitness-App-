@@ -123,15 +123,36 @@ class FitnessViewModel(private val repository: WorkoutRepository) : ViewModel() 
                 return@launch
             }
 
-            try {
-                val response = withContext(Dispatchers.IO) {
-                    val request = GenerateContentRequest(
-                        contents = listOf(Content(parts = listOf(Part(text = prompt))))
-                    )
-                    RetrofitClient.service.generateContent(apiKey, request)
-                }
+            var lastException: Exception? = null
+            var aiText: String? = null
+            
+            // Try different models sequentially to handle potential server status issues (like HTTP 503)
+            val modelsToTry = listOf(
+                "gemini-3.5-flash",
+                "gemini-3.1-flash-lite-preview",
+                "gemini-3.1-pro-preview",
+                "gemini-2.5-flash"
+            )
 
-                val aiText = response.candidates?.firstOrNull()?.content?.parts?.firstOrNull()?.text
+            for (modelName in modelsToTry) {
+                try {
+                    val response = withContext(Dispatchers.IO) {
+                        val request = GenerateContentRequest(
+                            contents = listOf(Content(parts = listOf(Part(text = prompt))))
+                        )
+                        RetrofitClient.service.generateContent(modelName, apiKey, request)
+                    }
+                    val text = response.candidates?.firstOrNull()?.content?.parts?.firstOrNull()?.text
+                    if (text != null) {
+                        aiText = text
+                        break
+                    }
+                } catch (e: Exception) {
+                    lastException = e
+                }
+            }
+
+            try {
                 if (aiText != null) {
                     val baseSummary = if (logs.isEmpty()) "Initial split setup" else "Based on ${logs.size} recent sets"
                     val recommendation = AiRecommendation(
@@ -143,7 +164,8 @@ class FitnessViewModel(private val repository: WorkoutRepository) : ViewModel() 
                         repository.insertRecommendation(recommendation)
                     }
                 } else {
-                    _errorMessage.value = "Failed to parse a response from Gemini. Please try again."
+                    val fallbackError = lastException?.localizedMessage ?: "Unknown connection error"
+                    _errorMessage.value = "Failed to parse a response from Gemini: $fallbackError"
                 }
             } catch (e: Exception) {
                 _errorMessage.value = "Network Error: ${e.localizedMessage ?: "Unknown connection error"}"
