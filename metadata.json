@@ -1,0 +1,8 @@
+{
+  "name": "Pulse Fitness",
+  "description": "Log workouts, track metrics and progress, and get tailored AI routine recommendations powered by Gemini.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
